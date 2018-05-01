@@ -1,15 +1,15 @@
 #!/usr/bin/php
-
 <?php
 
 /**
  * @author Douglas Haubert <dhaubert.ti@gmail.com>
  * File created to convert drone deploy csv logs to gpx (GPS Exchange Format)
  */
-if( in_array($argv[1], array('help', '--help', '-h')) ){
+$hasArguments = $argc > 1;
+if( $hasArguments && in_array($argv[1], array('help', '--help', '-h')) ){
       echo getHelp();
 } else {
-      $directory = $argv[1] ? trim($argv[1]) : './'  ;
+      $directory = $hasArguments && $argv[1] ? trim($argv[1]) : './'  ;
       $outputFile = $argv[2] ?? 'droneDeployLog' . date('Y-m-d-H-i-s') . '.gpx'; 
 
       $files = getLogFiles($directory);
@@ -27,12 +27,11 @@ if( in_array($argv[1], array('help', '--help', '-h')) ){
  * @return string
  */
 function getHelp(){
-
-      $help .= "-- DroneDeploy Logs to GPX converter --\n";
+      $help = "-- DroneDeploy Logs to GPX converter --\n";
       $help .= "-- Options: \n";
       $help .= "> droneDeploy2Gpx <directory> <outputFile> \n";
-      $help .= "# where <directory> stands for the directory with droneDeploy log files (.txt)\n";
-      $help .= "# and <outputFile> stands for the result of the GPX file\n";
+      $help .= "# where <directory> stands for the directory with droneDeploy log files (.txt). Optionally gets the current dir.\n";
+      $help .= "# and <outputFile> stands for the result of the GPX file. Optionally writes to droneDeployLog<date>.gpx\n";
       $help .= "Example: droneDeploy2Gpx ./myDroneDeployLogs/ myGPX.gpx\n";      
       return $help;
 }
@@ -72,8 +71,9 @@ function getGPX($files){
                                     'datetime' => DateTime::createFromFormat('d/m/Y H:i:s', $data[0]),
                                     'latitude' => $data[17],
                                     'longitude' => $data[18],
-                                    'altitude' => number_format($data[21], 3),
+                                    'altitude' => number_format($data[20]*0.3048, 3),
                               ];
+                              echo "\nlat: {$data[17]} long {$data[18]} alt: ". number_format($data[20]*0.3048, 3);
                         }
                         $row++;
                   }
@@ -106,15 +106,18 @@ function writeFile($outputFile, $content){
  * @return string 
  */
 function gpxFormatRow($datetime, $latitude, $longitude, $altitude) {
-   ob_start();
-   ?>
-   <trkpt lat="<?= $latitude ?>" lon="<?= $longitude ?>">
-      <ele><?= $altitude ?></ele>
-      <time><?= $datetime->format('Y-m-d\TH:i:s\Z') //2009-10-17T18:37:26Z  ?></time>
-   </trkpt>
-   <?php
-   return ob_get_clean();
-}
+      if($datetime){
+           ob_start();
+           ?>
+      <wpt lat="<?= $latitude ?>" lon="<?= $longitude ?>">
+            <ele><?= $altitude ?></ele>
+            <time><?= $datetime->format('Y-d-m\TH:i:s\Z') //2009-10-17T18:37:26Z  ?></time>
+      </wpt>
+           <?php
+           $element = ob_get_clean();
+      }
+      return $element;
+   }
 /**
  * Get all the rows readed from drone deploy logs and convert to gpx format
  *
@@ -124,25 +127,18 @@ function gpxFormatRow($datetime, $latitude, $longitude, $altitude) {
 function gpxFormat($rows) {
    ob_start();
    ?>
-   <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
-   <gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" creator="Oregon 400t" version="1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensionsv3.xsd http://www.garmin.com/xmlschemas/TrackPointExtension/v1 http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd">
-      <metadata>
-         <link href="http://www.garmin.com">
-            <text>Garmin International</text>
-         </link>
-         <time><?= date('Z') ?></time>
-      </metadata>
-      <trk>
-         <name>Drone Deploy Log</name>
-         <trkseg>
-            <?php
-            foreach($rows as $row){
-                  echo gpxFormatRow($row['datetime'], $row['latitude'], $row['longitude'], $row['altitude']);
-            }
-            ?>
-         </trkseg>
-      </trk>
-   </gpx>
-   <?php
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<gpx
+xmlns="http://www.topografix.com/GPX/1/1"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd"
+version="1.1" 
+creator="Douglas Haubert">
+      <?php
+      foreach($rows as $row){
+            echo gpxFormatRow($row['datetime'], $row['latitude'], $row['longitude'], $row['altitude']);
+      }
+      ?>
+</gpx><?php
    return ob_get_clean();
 }
